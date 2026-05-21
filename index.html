@@ -4,8 +4,6 @@
 <meta charset="UTF-8">
 <title>Veterans Memorial Park</title>
 
-<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
-
 <style>
 body {
     margin: 0;
@@ -14,83 +12,66 @@ body {
     color: white;
 }
 
+/* HEADER */
 .topbar {
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
     height: 80px;
     text-align: center;
     background: linear-gradient(#0b1c2c, #081520);
     padding-top: 10px;
-    z-index: 1000;
 }
 
-.title {
-    font-size: 24px;
-    font-weight: bold;
+.title { font-size: 24px; font-weight: bold; }
+.subtitle { font-size: 14px; }
+
+/* LAYOUT */
+.container {
+    display: flex;
+    height: calc(100vh - 80px);
 }
 
-.subtitle {
-    font-size: 14px;
-    opacity: 0.7;
-}
-
-.sidebar-left {
-    position: absolute;
-    left: 0;
-    top: 80px;
-    bottom: 0;
+.left, .right {
     width: 260px;
-    background: rgba(10,25,40,0.95);
+    background: #081520;
     padding: 10px;
     overflow-y: auto;
 }
 
-.sidebar-right {
-    position: absolute;
-    right: 0;
-    top: 80px;
-    bottom: 0;
-    width: 300px;
-    background: rgba(10,25,40,0.95);
-    padding: 20px;
+.center {
+    flex: 1;
+    display: flex;
+    justify-content: center;
+    align-items: center;
 }
 
-#map {
-    position: absolute;
-    top: 80px;
-    left: 260px;
-    right: 300px;
-    bottom: 0;
+/* MAP */
+.map {
+    position: relative;
+    width: 900px;
+    height: 700px;
 }
 
-.section-item {
-    padding: 10px;
-    border-bottom: 1px solid #1e3a5f;
-    cursor: pointer;
-}
-
-.section-item:hover {
-    background: #163454;
-}
-
+/* PAVER */
 .paver {
+    position: absolute;
+    width: 10px;
+    height: 10px;
+    background: #00ff88;
     cursor: pointer;
-}
-
-.occupied {
-    fill: rgba(0,255,100,0.7);
-    stroke: #00ff88;
 }
 
 .available {
-    fill: rgba(80,80,80,0.4);
-    stroke: #888;
+    background: gray;
 }
 
-.leaflet-container {
-    background: black;
+.paver:hover {
+    background: #00ffaa;
+}
+
+/* SEARCH */
+.search {
+    width: 100%;
+    padding: 6px;
+    margin-bottom: 10px;
 }
 </style>
 </head>
@@ -102,164 +83,132 @@ body {
     <div class="subtitle">PAVER MAP & DIRECTORY</div>
 </div>
 
-<div class="sidebar-left" id="sections"></div>
-<div id="map"></div>
+<div class="container">
 
-<div class="sidebar-right" id="details">
-    <h2>Selected Paver</h2>
-    <p>Click a paver</p>
+<div class="left">
+    <input class="search" id="search" placeholder="Search...">
 </div>
 
-<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+<div class="center">
+    <div id="map" class="map"></div>
+</div>
+
+<div class="right" id="details">
+    <h2>Select a Paver</h2>
+</div>
+
+</div>
 
 <script>
 
-const map = L.map('map', {
-    crs: L.CRS.Simple,
-    minZoom: -2
-});
+let DATA = [];
 
-const width = 2000;
-const height = 2000;
+// =======================
+// SECTION GEOMETRY
+// =======================
+const CONFIG = {
 
-const bounds = [[0,0],[height,width]];
+  "ALPHA 1": { x:500, y:50, angle:-20 },
+  "ALPHA 2": { x:300, y:50, angle:20 },
 
-// Your park image
-L.imageOverlay('park.png', bounds).addTo(map);
-map.fitBounds(bounds);
+  "BRAVO 1": { x:100, y:150, angle:60 },
+  "BRAVO 2": { x:100, y:320, angle:120 },
 
-let allPavers = [];
+  "CHARLIE 1": { x:200, y:520, angle:160 },
+  "CHARLIE 2": { x:380, y:600, angle:200 },
 
-fetch('pavers.json')
-.then(res => res.json())
-.then(data => {
-    allPavers = data;
-    drawPavers(data);
-    buildSections(data);
-});
+  "DELTA 1": { x:550, y:600, angle:340 },
+  "DELTA 2": { x:700, y:480, angle:20 },
 
-
-// ================================
-// PERFECTED SECTION LAYOUT
-// ================================
-
-// These are tuned to resemble your pentagon layout
-const SECTION_LAYOUT = {
-    "ALPHA 1": { cx: 750, cy: 450, angle: -160 },
-    "ALPHA 2": { cx: 1250, cy: 450, angle: -20 },
-
-    "BRAVO 1": { cx: 500, cy: 800, angle: -120 },
-    "BRAVO 2": { cx: 1500, cy: 800, angle: 120 },
-
-    "CHARLIE 1": { cx: 550, cy: 1200, angle: -70 },
-    "CHARLIE 2": { cx: 1450, cy: 1200, angle: 70 },
-
-    "DELTA 1": { cx: 750, cy: 1500, angle: -30 },
-    "DELTA 2": { cx: 1250, cy: 1500, angle: 30 },
-
-    "ECHO 1": { cx: 900, cy: 1750, angle: 0 },
-    "ECHO 2": { cx: 1100, cy: 1750, angle: 0 }
+  "ECHO 1": { x:750, y:300, angle:0 },
+  "ECHO 2": { x:750, y:150, angle:-10 }
 };
 
 
-// ================================
-// DRAW PAVERS WITH ROTATION
-// ================================
-function drawPavers(data) {
+// =======================
+// LOAD DATA
+// =======================
+fetch('pavers.json')
+.then(r=>r.json())
+.then(d=>{
+    DATA = d;
+    draw(d);
+});
 
-    data.forEach(p => {
 
-        if (!SECTION_LAYOUT[p.SECTION]) return;
+// =======================
+// DRAW REAL ANGLED ROWS
+// =======================
+function draw(data){
 
-        const layout = SECTION_LAYOUT[p.SECTION];
+    const map = document.getElementById("map");
+    map.innerHTML = "";
 
-        const rowIndex = p.ROW.charCodeAt(0) - 65;
-        const spacing = 18;
+    data.forEach(p=>{
 
-        let x = (p.NUMBER * spacing);
-        let y = (rowIndex * spacing);
+        const cfg = CONFIG[p.SECTION];
+        if(!cfg) return;
 
-        // Rotate layout for angled sections
-        const angleRad = layout.angle * Math.PI / 180;
+        const row = p.ROW.charCodeAt(0) - 65;
+        const col = p.NUMBER;
 
-        const rotatedX = x * Math.cos(angleRad) - y * Math.sin(angleRad);
-        const rotatedY = x * Math.sin(angleRad) + y * Math.cos(angleRad);
+        const spacing = 12;
 
-        const finalX = layout.cx + rotatedX;
-        const finalY = layout.cy + rotatedY;
+        const angle = cfg.angle * Math.PI/180;
 
-        const rect = L.rectangle([
-            [finalY, finalX],
-            [finalY + 14, finalX + 14]
-        ], {
-            className: p.NAME ? "occupied" : "available",
-            weight: 1
-        }).addTo(map);
+        // Direction vectors
+        const rowDx = Math.cos(angle);
+        const rowDy = Math.sin(angle);
 
-        rect.on('click', () => showDetails(p));
+        const perpDx = Math.cos(angle + Math.PI/2);
+        const perpDy = Math.sin(angle + Math.PI/2);
+
+        const x = cfg.x + rowDx * col * spacing + perpDx * row * spacing;
+        const y = cfg.y + rowDy * col * spacing + perpDy * row * spacing;
+
+        const div = document.createElement("div");
+        div.className = "paver";
+
+        if(!p.NAME) div.classList.add("available");
+
+        div.style.left = x + "px";
+        div.style.top = y + "px";
+
+        div.onclick = ()=>show(p);
+
+        map.appendChild(div);
     });
 }
 
 
-// ================================
+// =======================
 // DETAILS PANEL
-// ================================
-function showDetails(p) {
-    document.getElementById('details').innerHTML = `
+// =======================
+function show(p){
+    document.getElementById("details").innerHTML = `
         <h2>${p.NAME || "Available"}</h2>
-
-        <p><b>Section:</b> ${p.SECTION}</p>
-        <p><b>Row:</b> ${p.ROW}</p>
-        <p><b>Number:</b> ${p.NUMBER}</p>
-
+        <p><b>${p.SECTION}</b></p>
+        <p>Row ${p.ROW} | #${p.NUMBER}</p>
         <hr>
-
-        <p><b>Branch:</b> ${p.BRANCH || "-"}</p>
-        <p><b>Years:</b> ${p["YEARS SERVED"] || "-"}</p>
-        <p><b>War:</b> ${p["WAR & AWARDS"] || "-"}</p>
-        <p><b>Rank:</b> ${p["RANK INFORMATION"] || "-"}</p>
+        <p>${p.BRANCH || ""}</p>
+        <p>${p["YEARS SERVED"] || ""}</p>
+        <p>${p["WAR & AWARDS"] || ""}</p>
     `;
 }
 
 
-// ================================
-// LEFT PANEL
-// ================================
-function buildSections(data) {
+// =======================
+// SEARCH
+// =======================
+document.getElementById("search").addEventListener("input", e=>{
+    const term = e.target.value.toLowerCase();
 
-    const counts = {};
-
-    data.forEach(p => {
-        counts[p.SECTION] = (counts[p.SECTION] || 0) + 1;
-    });
-
-    const container = document.getElementById('sections');
-
-    Object.keys(counts).forEach(sec => {
-
-        const div = document.createElement('div');
-        div.className = "section-item";
-        div.innerHTML = `${sec} <span style="float:right">${counts[sec]}</span>`;
-
-        div.onclick = () => zoomToSection(sec);
-
-        container.appendChild(div);
-    });
-}
-
-
-// ================================
-// ZOOM TO SECTION
-// ================================
-function zoomToSection(section) {
-
-    const l = SECTION_LAYOUT[section];
-
-    map.fitBounds([
-        [l.cy - 300, l.cx - 300],
-        [l.cy + 300, l.cx + 300]
-    ]);
-}
+    draw(
+        term
+        ? DATA.filter(p => p.NAME && p.NAME.toLowerCase().includes(term))
+        : DATA
+    );
+});
 
 </script>
 
