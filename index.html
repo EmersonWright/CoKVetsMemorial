@@ -12,7 +12,6 @@ body {
     color: white;
 }
 
-/* HEADER */
 .topbar {
     height: 80px;
     text-align: center;
@@ -29,7 +28,6 @@ body {
     width: 260px;
     background: #081520;
     padding: 10px;
-    overflow-y: auto;
 }
 
 .center {
@@ -41,36 +39,22 @@ body {
 
 .map {
     position: relative;
-    width: 900px;
-    height: 700px;
+    width: 800px;
+    height: 800px;
 }
 
-/* PAVERS */
 .paver {
     position: absolute;
-    width: 10px;
-    height: 10px;
+    width: 8px;
+    height: 8px;
     background: #00ff88;
-    cursor: pointer;
 }
 
 .available { background: gray; }
 
-.paver:hover {
-    background: #00ffaa;
-}
-
-/* ROW LABELS */
 .label {
     position: absolute;
     font-size: 10px;
-}
-
-/* SEARCH */
-.search {
-    width: 100%;
-    padding: 6px;
-    margin-bottom: 10px;
 }
 </style>
 </head>
@@ -83,9 +67,8 @@ body {
 </div>
 
 <div class="container">
-
 <div class="left">
-    <input id="search" class="search" placeholder="Search...">
+    <input id="search" placeholder="Search...">
 </div>
 
 <div class="center">
@@ -93,160 +76,131 @@ body {
 </div>
 
 <div class="right" id="details">
-    <h2>Select a Paver</h2>
+<h2>Select a Paver</h2>
 </div>
-
 </div>
 
 <script>
 
-// ===================================
-// SECTION POSITIONS + EDGE DIRECTIONS
-// ===================================
-const CONFIG = {
-
-  "ALPHA 1": { x:520, y:90, angle:180 },
-  "ALPHA 2": { x:320, y:90, angle:180 },
-
-  "BRAVO 1": { x:140, y:180, angle:240 },
-  "BRAVO 2": { x:140, y:360, angle:280 },
-
-  "CHARLIE 1": { x:260, y:540, angle:320 },
-  "CHARLIE 2": { x:420, y:620, angle:20 },
-
-  "DELTA 1": { x:600, y:620, angle:20 },
-  "DELTA 2": { x:740, y:500, angle:60 },
-
-  "ECHO 1": { x:780, y:320, angle:100 },
-  "ECHO 2": { x:780, y:180, angle:140 }
-};
-
-let DATA = [];
+let DATA=[];
 
 fetch('pavers.json')
 .then(r=>r.json())
 .then(d=>{
-    DATA = d;
-    draw(d);
+    DATA=d;
+    draw(DATA);
 });
 
+// ======================
+// PENTAGON GEOMETRY
+// ======================
+const centerX = 400;
+const centerY = 400;
+const sides = 5;
 
-// ===================================
-// ✅ BUILD REAL SHAPES FROM DATA
-// ===================================
+// Generates pentagon points
+function pentagon(radius){
+    const pts=[];
+    for(let i=0;i<sides;i++){
+        const angle = (Math.PI*2/sides)*i - Math.PI/2;
+        pts.push([
+            centerX + Math.cos(angle)*radius,
+            centerY + Math.sin(angle)*radius
+        ]);
+    }
+    return pts;
+}
+
+// ======================
+// SECTION MAPPING
+// ======================
+const ORDER = [
+ "ALPHA 2","ALPHA 1",
+ "ECHO 2","ECHO 1",
+ "DELTA 2","DELTA 1",
+ "CHARLIE 2","CHARLIE 1",
+ "BRAVO 2","BRAVO 1"
+];
+
+// ======================
+// DRAW CORRECTLY
+// ======================
 function draw(data){
 
-    const map = document.getElementById("map");
-    map.innerHTML = "";
+    const map=document.getElementById("map");
+    map.innerHTML="";
 
-    const grouped = {};
+    // group by section + row
+    const grouped={};
 
-    // group by section → row
     data.forEach(p=>{
-        if(!grouped[p.SECTION]) grouped[p.SECTION] = {};
-        if(!grouped[p.SECTION][p.ROW]) grouped[p.SECTION][p.ROW] = [];
+        if(!grouped[p.SECTION]) grouped[p.SECTION]={};
+        if(!grouped[p.SECTION][p.ROW]) grouped[p.SECTION][p.ROW]=[];
         grouped[p.SECTION][p.ROW].push(p);
     });
 
-    for(const section in grouped){
+    // get max rows
+    const rows = [...new Set(data.map(p=>p.ROW))].sort();
 
-        const cfg = CONFIG[section];
-        if(!cfg) continue;
+    rows.forEach((rowLetter,rowIndex)=>{
 
-        const rows = Object.keys(grouped[section]).sort();
+        const inner = pentagon(120 + rowIndex*14);
 
-        const angle = cfg.angle * Math.PI/180;
-        const spacing = 12;
+        inner.forEach((pt,i)=>{
 
-        const edgeDx = Math.cos(angle);
-        const edgeDy = Math.sin(angle);
+            const next = inner[(i+1)%inner.length];
 
-        const outDx = Math.cos(angle - Math.PI/2);
-        const outDy = Math.sin(angle - Math.PI/2);
+            // get sections mapping
+            const s1 = ORDER[i*2];
+            const s2 = ORDER[i*2+1];
 
-        rows.forEach((rowLetter, rowIndex)=>{
-
-            const rowItems = grouped[section][rowLetter];
-
-            // ✅ SORT BY NUMBER
-            rowItems.sort((a,b)=>a.NUMBER - b.NUMBER);
-
-            const rowWidth = rowItems.length;
-
-            // ✅ CENTER ROW
-            rowItems.forEach((p, i)=>{
-
-                const centeredCol = i - rowWidth/2;
-
-                const x = cfg.x 
-                        + edgeDx * centeredCol * spacing
-                        + outDx * rowIndex * spacing;
-
-                const y = cfg.y 
-                        + edgeDy * centeredCol * spacing
-                        + outDy * rowIndex * spacing;
-
-                const div = document.createElement("div");
-                div.className = "paver";
-
-                if(!p.NAME) div.classList.add("available");
-
-                div.style.left = x + "px";
-                div.style.top = y + "px";
-
-                div.onclick = ()=>show(p);
-
-                map.appendChild(div);
-            });
-
-            // ✅ ROW LABEL
-            const lx = cfg.x + outDx * rowIndex * spacing;
-            const ly = cfg.y + outDy * rowIndex * spacing;
-
-            const label = document.createElement("div");
-            label.className = "label";
-            label.innerText = rowLetter;
-
-            label.style.left = (lx - 12) + "px";
-            label.style.top = (ly - 6) + "px";
-
-            map.appendChild(label);
+            drawSectionRow(grouped[s1],rowLetter,pt,next,map,true);
+            drawSectionRow(grouped[s2],rowLetter,pt,next,map,false);
 
         });
-    }
+
+    });
 }
 
 
-// ===================================
-// DETAILS PANEL
-// ===================================
-function show(p){
-    document.getElementById("details").innerHTML = `
-        <h2>${p.NAME || "Available"}</h2>
-        <p><b>${p.SECTION}</b></p>
-        <p>Row ${p.ROW} | #${p.NUMBER}</p>
-        <hr>
-        <p>${p.BRANCH || ""}</p>
-        <p>${p["YEARS SERVED"] || ""}</p>
-        <p>${p["WAR & AWARDS"] || ""}</p>
-    `;
+// ======================
+// DRAW SINGLE SECTION ROW
+// ======================
+function drawSectionRow(sec,row,pt1,pt2,map,flip){
+
+    if(!sec || !sec[row]) return;
+
+    const items = sec[row].sort((a,b)=>a.NUMBER-b.NUMBER);
+
+    const dx = pt2[0]-pt1[0];
+    const dy = pt2[1]-pt1[1];
+
+    const len = Math.sqrt(dx*dx+dy*dy);
+
+    const ux = dx/len;
+    const uy = dy/len;
+
+    const spacing = 10;
+
+    items.forEach((p,i)=>{
+
+        const index = flip ? i : (items.length-i);
+
+        const x = pt1[0] + ux * index * spacing;
+        const y = pt1[1] + uy * index * spacing;
+
+        const div=document.createElement("div");
+        div.className="paver";
+
+        if(!p.NAME) div.classList.add("available");
+
+        div.style.left=x+"px";
+        div.style.top=y+"px";
+
+        map.appendChild(div);
+    });
 }
-
-
-// ===================================
-// SEARCH
-// ===================================
-document.getElementById("search").addEventListener("input", e=>{
-    const term = e.target.value.toLowerCase();
-
-    draw(
-        term
-        ? DATA.filter(p => p.NAME && p.NAME.toLowerCase().includes(term))
-        : DATA
-    );
-});
 
 </script>
-
 </body>
 </html>
